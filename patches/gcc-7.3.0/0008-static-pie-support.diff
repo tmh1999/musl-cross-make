@@ -1,0 +1,115 @@
+diff --git a/gcc/common.opt b/gcc/common.opt
+index 437db8e86..84c8c9679 100644
+--- a/gcc/common.opt
++++ b/gcc/common.opt
+@@ -3088,11 +3088,11 @@ Driver
+ 
+ no-pie
+ Driver RejectNegative Negative(shared)
+-Don't create a position independent executable.
++Don't create a dynamically linked position independent executable.
+ 
+ pie
+ Driver RejectNegative Negative(no-pie)
+-Create a position independent executable.
++Create a dynamically linked position independent executable.
+ 
+ z
+ Driver Joined Separate
+diff --git a/gcc/config/gnu-user.h b/gcc/config/gnu-user.h
+index de605b0c4..94ed06e4f 100644
+--- a/gcc/config/gnu-user.h
++++ b/gcc/config/gnu-user.h
+@@ -52,12 +52,12 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define GNU_USER_TARGET_STARTFILE_SPEC \
+   "%{shared:; \
+      pg|p|profile:gcrt1.o%s; \
+-     static:crt1.o%s; \
++     static:%{" PIE_SPEC ":rcrt1.o%s;:crt1.o%s}; \
+      " PIE_SPEC ":Scrt1.o%s; \
+      :crt1.o%s} \
+    crti.o%s \
+-   %{static:crtbeginT.o%s; \
+-     shared|" PIE_SPEC ":crtbeginS.o%s; \
++   %{shared|" PIE_SPEC ":crtbeginS.o%s; \
++     static:crtbeginT.o%s; \
+      :crtbegin.o%s} \
+    %{fvtable-verify=none:%s; \
+      fvtable-verify=preinit:vtv_start_preinit.o%s; \
+@@ -91,8 +91,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   "%{fvtable-verify=none:%s; \
+      fvtable-verify=preinit:vtv_end_preinit.o%s; \
+      fvtable-verify=std:vtv_end.o%s} \
+-   %{static:crtend.o%s; \
+-     shared|" PIE_SPEC ":crtendS.o%s; \
++   %{shared|" PIE_SPEC ":crtendS.o%s; \
+      :crtend.o%s} \
+    crtn.o%s \
+    " CRTOFFLOADEND
+@@ -132,7 +131,7 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+ #define LIB_SPEC GNU_USER_TARGET_LIB_SPEC
+ 
+ #if defined(HAVE_LD_EH_FRAME_HDR)
+-#define LINK_EH_SPEC "%{!static:--eh-frame-hdr} "
++#define LINK_EH_SPEC "%{!static|" PIE_SPEC ":--eh-frame-hdr} "
+ #endif
+ 
+ #undef LINK_GCC_C_SEQUENCE_SPEC
+diff --git a/gcc/config/rs6000/sysv4.h b/gcc/config/rs6000/sysv4.h
+index cbee89140..1ddffbf15 100644
+--- a/gcc/config/rs6000/sysv4.h
++++ b/gcc/config/rs6000/sysv4.h
+@@ -762,12 +762,12 @@ ENDIAN_SELECT(" -mbig", " -mlittle", DEFAULT_ASM_ENDIAN)
+ #define	STARTFILE_LINUX_SPEC \
+   "%{shared:; \
+      pg|p|profile:gcrt1.o%s; \
+-     static:crt1.o%s; \
++     static:%{" PIE_SPEC ":rcrt1.o%s;:crt1.o%s}; \
+      " PIE_SPEC ":Scrt1.o%s; \
+      :crt1.o%s} \
+    %{mnewlib:ecrti.o%s;:crti.o%s} \
+-   %{static:crtbeginT.o%s; \
+-     shared|" PIE_SPEC ":crtbeginS.o%s; \
++   %{shared|" PIE_SPEC ":crtbeginS.o%s; \
++     static:crtbeginT.o%s; \
+      :crtbegin.o%s} \
+    %{fvtable-verify=none:%s; \
+      fvtable-verify=preinit:vtv_start_preinit.o%s; \
+@@ -780,8 +780,7 @@ ENDIAN_SELECT(" -mbig", " -mlittle", DEFAULT_ASM_ENDIAN)
+   "%{fvtable-verify=none:%s; \
+      fvtable-verify=preinit:vtv_end_preinit.o%s; \
+      fvtable-verify=std:vtv_end.o%s} \
+-   %{static:crtend.o%s; \
+-     shared|" PIE_SPEC ":crtendS.o%s; \
++   %{shared|" PIE_SPEC ":crtendS.o%s; \
+      :crtend.o%s} \
+    %{mnewlib:ecrtn.o%s;:crtn.o%s} \
+    " CRTOFFLOADEND
+diff --git a/gcc/gcc.c b/gcc/gcc.c
+index e2fae4ef0..9a10a028b 100644
+--- a/gcc/gcc.c
++++ b/gcc/gcc.c
+@@ -917,12 +917,12 @@ proper position among the other output files.  */
+ #ifndef LINK_PIE_SPEC
+ #ifdef HAVE_LD_PIE
+ #ifndef LD_PIE_SPEC
+-#define LD_PIE_SPEC "-pie"
++#define LD_PIE_SPEC "-pie %{static:--no-dynamic-linker -Bsymbolic}"
+ #endif
+ #else
+ #define LD_PIE_SPEC ""
+ #endif
+-#define LINK_PIE_SPEC "%{static|shared|r:;" PIE_SPEC ":" LD_PIE_SPEC "} "
++#define LINK_PIE_SPEC "%{shared|r:;" PIE_SPEC ":" LD_PIE_SPEC "} "
+ #endif
+ 
+ #ifndef LINK_BUILDID_SPEC
+@@ -1692,7 +1692,7 @@ init_gcc_specs (struct obstack *obstack, const char *shared_name,
+ 		"%{shared:", shared_name, "}"
+ #endif
+ #endif
+-		"}}", NULL);
++		"}}}", NULL);
+ 
+   obstack_grow (obstack, buf, strlen (buf));
+   free (buf);
